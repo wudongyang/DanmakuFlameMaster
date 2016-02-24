@@ -266,9 +266,13 @@ public class DanmakuSurfaceView extends SurfaceView implements IDanmakuView, IDa
                     if (mDrawTimes == null)
                         mDrawTimes = new LinkedList<Long>();
                     dtime = System.currentTimeMillis() - stime;
+//                    String fps = String.format(Locale.getDefault(),
+//                            "fps %.2f,time:%d s,cache:%d,miss:%d", fps(), getCurrentTime() / 1000,
+//                            rs.cacheHitCount, rs.cacheMissCount);
                     String fps = String.format(Locale.getDefault(),
-                            "fps %.2f,time:%d s,cache:%d,miss:%d", fps(), getCurrentTime() / 1000,
-                            rs.cacheHitCount, rs.cacheMissCount);
+                            "DanmakuSurfaceView: fps %.2f,time:%d s,cache:%d,miss:%d, isCache:%b", fps(), getCurrentTime() / 1000,
+                            rs.cacheHitCount, rs.cacheMissCount, mEnableDanmakuDrwaingCache);
+                    
                     DrawHelper.drawFPS(canvas, fps);
                 }
             }

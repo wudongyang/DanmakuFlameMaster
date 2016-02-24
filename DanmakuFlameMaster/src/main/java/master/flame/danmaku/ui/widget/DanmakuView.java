@@ -301,9 +301,12 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
                 if (mShowFps) {
                     if (mDrawTimes == null)
                         mDrawTimes = new LinkedList<Long>();
+//                    String fps = String.format(Locale.getDefault(),
+//                            "fps %.2f,time:%d s,cache:%d,miss:%d", fps(), getCurrentTime() / 1000,
+//                            rs.cacheHitCount, rs.cacheMissCount);
                     String fps = String.format(Locale.getDefault(),
-                            "fps %.2f,time:%d s,cache:%d,miss:%d", fps(), getCurrentTime() / 1000,
-                            rs.cacheHitCount, rs.cacheMissCount);
+                            "DanmakuView:fps %.2f,time:%d s,cache:%d,miss:%d, isCache:%b ", fps(), getCurrentTime() / 1000,
+                            rs.cacheHitCount, rs.cacheMissCount,  mEnableDanmakuDrwaingCache);
                     DrawHelper.drawFPS(canvas, fps);
                 }
             }
