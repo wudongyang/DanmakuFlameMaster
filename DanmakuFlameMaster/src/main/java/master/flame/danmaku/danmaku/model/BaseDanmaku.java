@@ -36,6 +36,9 @@ public abstract class BaseDanmaku {
 
     public final static int VISIBLE = 1;
 
+    public final static int FLAG_REQUEST_REMEASURE = 0x1;
+    public final static int FLAG_REQUEST_INVALIDATE = 0x2;
+
     /**
      * 显示时间(毫秒)
      */
@@ -134,7 +137,7 @@ public abstract class BaseDanmaku {
     /**
      * 重置位 measure
      */
-    private int measureResetFlag = 0;
+    public int measureResetFlag = 0;
 
     /**
      * 绘制用缓存
@@ -145,6 +148,11 @@ public abstract class BaseDanmaku {
      * 是否是直播弹幕
      */
     public boolean isLive;
+
+    /**
+     * 临时, 是否在同线程创建缓存
+     */
+    public boolean forceBuildCacheInSameThread;
 
     /**
      * 弹幕发布者id, 0表示游客
@@ -177,6 +185,13 @@ public abstract class BaseDanmaku {
 
     public GlobalFlagValues flags = null;
 
+    public int requestFlags = 0;
+
+    /**
+     * 标记是否首次显示，首次显示后将置为FIRST_SHOWN_RESET_FLAG
+     */
+    public int firstShownFlag = -1;
+
     public long getDuration() {
         return duration.value;
     }
@@ -194,8 +209,8 @@ public abstract class BaseDanmaku {
                 && measureResetFlag == flags.MEASURE_RESET_FLAG;
     }
 
-    public void measure(IDisplayer displayer) {
-        displayer.measure(this);
+    public void measure(IDisplayer displayer, boolean fromWorkerThread) {
+        displayer.measure(this, fromWorkerThread);
         this.measureResetFlag = flags.MEASURE_RESET_FLAG;
     }
 

@@ -15,7 +15,6 @@ import master.flame.danmaku.danmaku.model.AbsDisplayer;
 import master.flame.danmaku.danmaku.model.AlphaValue;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
 import master.flame.danmaku.danmaku.model.GlobalFlagValues;
-import master.flame.danmaku.danmaku.parser.DanmakuFactory;
 
 public class DanmakuContext {
 
@@ -112,7 +111,7 @@ public class DanmakuContext {
 
     public final DanmakuFilters mDanmakuFilters = new DanmakuFilters();
 
-    public final DanmakuFactory mDanmakuFactory = new DanmakuFactory();
+    public final DanmakuFactory mDanmakuFactory = DanmakuFactory.create();
 
     public AbsDisplayer getDisplayer() {
         return mDisplayer;
@@ -581,10 +580,12 @@ public class DanmakuContext {
      * 设置缓存绘制填充器，默认使用{@link SimpleTextCacheStuffer}只支持纯文字显示, 如果需要图文混排请设置{@link SpannedCacheStuffer}
      * 如果需要定制其他样式请扩展{@link SimpleTextCacheStuffer}|{@link SpannedCacheStuffer}
      * @param cacheStuffer
+     * @param cacheStufferAdapter
      */
-    public DanmakuContext setCacheStuffer(BaseCacheStuffer cacheStuffer) {
+    public DanmakuContext setCacheStuffer(BaseCacheStuffer cacheStuffer, BaseCacheStuffer.Proxy cacheStufferAdapter) {
         this.mCacheStuffer = cacheStuffer;
         if (this.mCacheStuffer != null) {
+            this.mCacheStuffer.setProxy(cacheStufferAdapter);
             mDisplayer.setCacheStuffer(this.mCacheStuffer);
         }
         return this;

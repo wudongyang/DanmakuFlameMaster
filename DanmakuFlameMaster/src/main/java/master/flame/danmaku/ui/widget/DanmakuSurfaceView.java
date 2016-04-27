@@ -40,6 +40,7 @@ import master.flame.danmaku.danmaku.model.IDanmakus;
 import master.flame.danmaku.danmaku.model.android.DanmakuContext;
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
 import master.flame.danmaku.danmaku.renderer.IRenderer.RenderingState;
+import master.flame.danmaku.danmaku.util.SystemClock;
 
 public class DanmakuSurfaceView extends SurfaceView implements IDanmakuView, IDanmakuViewController, SurfaceHolder.Callback {
 
@@ -99,11 +100,18 @@ public class DanmakuSurfaceView extends SurfaceView implements IDanmakuView, IDa
             handler.addDanmaku(item);
         }
     }
-    
+
     @Override
-    public void removeAllDanmakus() {
+    public void invalidateDanmaku(BaseDanmaku item, boolean remeasure) {
         if (handler != null) {
-            handler.removeAllDanmakus();
+            handler.invalidateDanmaku(item, remeasure);
+        }
+    }
+
+    @Override
+    public void removeAllDanmakus(boolean isClearDanmakusOnScreen) {
+        if (handler != null) {
+            handler.removeAllDanmakus(isClearDanmakusOnScreen);
         }
     }
     
@@ -169,13 +177,14 @@ public class DanmakuSurfaceView extends SurfaceView implements IDanmakuView, IDa
             handler = null;
         }
         if (mHandlerThread != null) {
+            HandlerThread handlerThread = this.mHandlerThread;
+            mHandlerThread = null;
             try {
-                mHandlerThread.join();
+                handlerThread.join();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            mHandlerThread.quit();
-            mHandlerThread = null;
+            handlerThread.quit();
         }
     }
     
@@ -241,7 +250,7 @@ public class DanmakuSurfaceView extends SurfaceView implements IDanmakuView, IDa
     private static final int ONE_SECOND = 1000;
     private LinkedList<Long> mDrawTimes;
     private float fps() {
-        long lastTime = System.currentTimeMillis();
+        long lastTime = SystemClock.uptimeMillis();
         mDrawTimes.addLast(lastTime);
         float dtime = lastTime - mDrawTimes.getFirst();
         int frames = mDrawTimes.size();
@@ -256,7 +265,7 @@ public class DanmakuSurfaceView extends SurfaceView implements IDanmakuView, IDa
             return 0;
         if (!isShown())
             return -1;
-        long stime = System.currentTimeMillis();
+        long stime = SystemClock.uptimeMillis();
         long dtime = 0;
         Canvas canvas = mSurfaceHolder.lockCanvas();
         if (canvas != null){
@@ -279,7 +288,7 @@ public class DanmakuSurfaceView extends SurfaceView implements IDanmakuView, IDa
             if (isSurfaceCreated)
                 mSurfaceHolder.unlockCanvasAndPost(canvas);
         }
-        dtime = System.currentTimeMillis() - stime;
+        dtime = SystemClock.uptimeMillis() - stime;
         return dtime;
     }
 

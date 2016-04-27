@@ -35,12 +35,14 @@ public interface IDanmakuView {
     public void showFPS(boolean show);
     
     /**
-     * 如果批量添加弹幕,请在非UI线程中使用此方法
+     * danmaku.isLive == true的情况下,请在非UI线程中使用此方法,避免可能卡住主线程
      * @param item
      */
     public void addDanmaku(BaseDanmaku item);
+
+    public void invalidateDanmaku(BaseDanmaku item, boolean remeasure);
     
-    public void removeAllDanmakus();
+    public void removeAllDanmakus(boolean isClearDanmakusOnScreen);
     
     public void removeAllLiveDanmakus();
 

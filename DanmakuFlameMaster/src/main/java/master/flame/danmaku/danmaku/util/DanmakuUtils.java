@@ -46,7 +46,7 @@ public class DanmakuUtils {
             return false;
         }
         long dTime = d2.time - d1.time;
-        if (dTime < 0)
+        if (dTime <= 0)
             return true;
         if (Math.abs(dTime) >= duration || d1.isTimeOut() || d2.isTimeOut()) {
             return false;
@@ -93,7 +93,7 @@ public class DanmakuUtils {
         cache.build((int) Math.ceil(danmaku.paintWidth), (int) Math.ceil(danmaku.paintHeight), disp.getDensityDpi(), false);
         DrawingCacheHolder holder = cache.get();
         if (holder != null) {
-            ((AbsDisplayer) disp).drawDanmaku(danmaku, holder.canvas, 0, 0, false);
+            ((AbsDisplayer) disp).drawDanmaku(danmaku, holder.canvas, 0, 0, true);
             if(disp.isHardwareAccelerated()) {
                 holder.splitWith(disp.getWidth(), disp.getHeight(), disp.getMaximumCacheWidth(),
                         disp.getMaximumCacheHeight());
@@ -146,15 +146,8 @@ public class DanmakuUtils {
         } else if (val < 0) {
             return -1;
         }
-        
-        int result = obj1.index - obj2.index;
-        if (result > 0) {
-            return 1;
-        } else if (result < 0) {
-            return -1;
-        }
 
-        result = obj1.getType() - obj2.getType();
+        int result = obj1.getType() - obj2.getType();
         if (result > 0) {
             return 1;
         } else if (result < 0) {
@@ -189,9 +182,9 @@ public class DanmakuUtils {
         return disp.isHardwareAccelerated() && (item.paintWidth > disp.getMaximumCacheWidth() || item.paintHeight > disp.getMaximumCacheHeight());
     }
 
-    public static void fillText(BaseDanmaku danmaku, String text) {
+    public static void fillText(BaseDanmaku danmaku, CharSequence text) {
         danmaku.text = text;
-        if (TextUtils.isEmpty(text) || !text.contains(BaseDanmaku.DANMAKU_BR_CHAR)) {
+        if (TextUtils.isEmpty(text) || !text.toString().contains(BaseDanmaku.DANMAKU_BR_CHAR)) {
             return;
         }
 

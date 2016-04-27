@@ -26,7 +26,7 @@ public interface IDrawTask {
 
     public void addDanmaku(BaseDanmaku item);
 
-    public void removeAllDanmakus();
+    public void removeAllDanmakus(boolean isClearDanmakusOnScreen);
 
     public void removeAllLiveDanmakus();
 
@@ -50,10 +50,14 @@ public interface IDrawTask {
 
     public void setParser(BaseDanmakuParser parser);
 
+    void invalidateDanmaku(BaseDanmaku item, boolean remeasure);
+
     public interface TaskListener {
         public void ready();
 
         public void onDanmakuAdd(BaseDanmaku danmaku);
+
+        public void onDanmakuShown(BaseDanmaku danmaku);
 
         public void onDanmakuConfigChanged();
 

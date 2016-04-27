@@ -18,12 +18,14 @@ package master.flame.danmaku.danmaku.renderer.android;
 
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
 import master.flame.danmaku.danmaku.model.DanmakuTimer;
+import master.flame.danmaku.danmaku.model.ICacheManager;
 import master.flame.danmaku.danmaku.model.IDanmakuIterator;
 import master.flame.danmaku.danmaku.model.IDanmakus;
 import master.flame.danmaku.danmaku.model.IDisplayer;
 import master.flame.danmaku.danmaku.model.android.DanmakuContext;
 import master.flame.danmaku.danmaku.renderer.IRenderer;
 import master.flame.danmaku.danmaku.renderer.Renderer;
+import master.flame.danmaku.danmaku.util.SystemClock;
 
 
 public class DanmakuRenderer extends Renderer {
@@ -43,6 +45,8 @@ public class DanmakuRenderer extends Renderer {
         }
     };
     private final DanmakusRetainer mDanmakusRetainer;
+    private ICacheManager mCacheManager;
+    private OnDanmakuShownListener mOnDanmakuShownListener;
 
     public DanmakuRenderer(DanmakuContext config) {
         mContext = config;
@@ -77,16 +81,12 @@ public class DanmakuRenderer extends Renderer {
         mRenderingState.reset();       
         IDanmakuIterator itr = danmakus.iterator();
         int orderInScreen = 0;        
-        mStartTimer.update(System.currentTimeMillis());
+        mStartTimer.update(SystemClock.uptimeMillis());
         int sizeInScreen = danmakus.size();
         BaseDanmaku drawItem = null;
         while (itr.hasNext()) {
 
             drawItem = itr.next();
-            
-            if (drawItem.isLate()) {
-                break;
-            }
 
             if (!drawItem.hasPassedFilter()) {
                 mContext.mDanmakuFilters.filter(drawItem, orderInScreen, sizeInScreen, mStartTimer, false, mContext);
@@ -96,6 +96,13 @@ public class DanmakuRenderer extends Renderer {
                     || (drawItem.priority == 0 && drawItem.isFiltered())) {
                 continue;
             }
+
+            if (drawItem.isLate()) {
+                if (mCacheManager != null && !drawItem.hasDrawingCache()) {
+                    mCacheManager.addDanmaku(drawItem);
+                }
+                break;
+            }
             
             if (drawItem.getType() == BaseDanmaku.TYPE_SCROLL_RL){
                 // 同屏弹幕密度只对滚动弹幕有效
@@ -104,7 +111,7 @@ public class DanmakuRenderer extends Renderer {
 
             // measure
             if (!drawItem.isMeasured()) {
-                drawItem.measure(disp);
+                drawItem.measure(disp, false);
             }
 
             // layout
@@ -120,9 +127,18 @@ public class DanmakuRenderer extends Renderer {
                     mRenderingState.cacheHitCount++;
                 } else if(renderingType == IRenderer.TEXT_RENDERING) {
                     mRenderingState.cacheMissCount++;
+                    if (mCacheManager != null) {
+                        mCacheManager.addDanmaku(drawItem);
+                    }
                 }
                 mRenderingState.addCount(drawItem.getType(), 1);
                 mRenderingState.addTotalCount(1);
+
+                if (mOnDanmakuShownListener != null
+                        && drawItem.firstShownFlag != mContext.mGlobalFlagValues.FIRST_SHOWN_RESET_FLAG) {
+                    drawItem.firstShownFlag = mContext.mGlobalFlagValues.FIRST_SHOWN_RESET_FLAG;
+                    mOnDanmakuShownListener.onDanmakuShown(drawItem);
+                }
             }
 
         }
@@ -133,8 +149,21 @@ public class DanmakuRenderer extends Renderer {
             mRenderingState.beginTime = RenderingState.UNKNOWN_TIME;
         }
         mRenderingState.incrementCount = mRenderingState.totalDanmakuCount - lastTotalDanmakuCount;
-        mRenderingState.consumingTime = mStartTimer.update(System.currentTimeMillis());
+        mRenderingState.consumingTime = mStartTimer.update(SystemClock.uptimeMillis());
         return mRenderingState;
     }
-    
+
+    public void setCacheManager(ICacheManager cacheManager) {
+        mCacheManager = cacheManager;
+    }
+
+    @Override
+    public void setOnDanmakuShownListener(OnDanmakuShownListener onDanmakuShownListener) {
+        mOnDanmakuShownListener = onDanmakuShownListener;
+    }
+
+    @Override
+    public void removeOnDanmakuShownListener() {
+        mOnDanmakuShownListener = null;
+    }
 }

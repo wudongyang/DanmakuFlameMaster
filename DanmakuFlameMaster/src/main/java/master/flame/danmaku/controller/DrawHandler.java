@@ -16,13 +16,11 @@
 
 package master.flame.danmaku.controller;
 
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.os.SystemClock;
 import android.util.DisplayMetrics;
 
 import java.util.LinkedList;
@@ -36,6 +34,7 @@ import master.flame.danmaku.danmaku.model.android.DanmakuContext;
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
 import master.flame.danmaku.danmaku.renderer.IRenderer.RenderingState;
 import master.flame.danmaku.danmaku.util.AndroidUtils;
+import master.flame.danmaku.danmaku.util.SystemClock;
 import tv.cjump.jni.DeviceUtils;
 
 public class DrawHandler extends Handler {
@@ -46,6 +45,8 @@ public class DrawHandler extends Handler {
         public void prepared();
 
         public void updateTimer(DanmakuTimer timer);
+
+        public void danmakuShown(BaseDanmaku danmaku);
 
         public void drawingFinished();
 
@@ -103,12 +104,9 @@ public class DrawHandler extends Handler {
 
     private final RenderingState mRenderingState = new RenderingState();
 
-    @SuppressLint("Deprecated")
-    private int mSkipFrames;
-
     private static final int MAX_RECORD_SIZE = 500;
 
-    private LinkedList<Long> mDrawTimes = new LinkedList<Long>();
+    private LinkedList<Long> mDrawTimes = new LinkedList<>();
 
     private UpdateThread mThread;
 
@@ -116,7 +114,6 @@ public class DrawHandler extends Handler {
 
     private long mCordonTime = 30;
 
-    @SuppressWarnings("unused")
     private long mCordonTime2 = 60;
 
     private long mFrameUpdateRate = 16;
@@ -180,12 +177,14 @@ public class DrawHandler extends Handler {
         int what = msg.what;
         switch (what) {
             case PREPARE:
+                mTimeBase = SystemClock.uptimeMillis();
                 if (mParser == null || !mDanmakuView.isViewReady()) {
                     sendEmptyMessageDelayed(PREPARE, 100);
                 } else {
                     prepare(new Runnable() {
                         @Override
                         public void run() {
+                            pausedPosition = 0;
                             mReady = true;
                             if (mCallback != null) {
                                 mCallback.prepared();
@@ -194,6 +193,28 @@ public class DrawHandler extends Handler {
                     });
                 }
                 break;
+            case SHOW_DANMAKUS:
+                mDanmakusVisible = true;
+                Long start = (Long) msg.obj;
+                boolean resume = false;
+                if (drawTask != null) {
+                    if (start == null) {
+                        timer.update(getCurrentTime());
+                        drawTask.requestClear();
+                    } else {
+                        drawTask.start();
+                        drawTask.seek(start);
+                        drawTask.requestClear();
+                        resume = true;
+                    }
+                }
+                if (quitFlag && mDanmakuView != null) {
+                    mDanmakuView.drawDanmakus();
+                }
+                notifyRendering();
+                if (!resume) {
+                    break;
+                }
             case START:
                 Long startTime = (Long) msg.obj;
                 if (startTime != null) {
@@ -201,12 +222,25 @@ public class DrawHandler extends Handler {
                 } else {
                     pausedPosition = 0;
                 }
+            case SEEK_POS:
+                if (what == SEEK_POS) {
+                    quitFlag = true;
+                    quitUpdateThread();
+                    Long position = (Long) msg.obj;
+                    long deltaMs = position - timer.currMillisecond;
+                    mTimeBase -= deltaMs;
+                    timer.update(position);
+                    mContext.mGlobalFlagValues.updateMeasureFlag();
+                    if (drawTask != null)
+                        drawTask.seek(position);
+                    pausedPosition = position;
+                }
             case RESUME:
                 quitFlag = false;
                 if (mReady) {
                     mRenderingState.reset();
                     mDrawTimes.clear();
-                    mTimeBase = System.currentTimeMillis() - pausedPosition;
+                    mTimeBase = SystemClock.uptimeMillis() - pausedPosition;
                     timer.update(pausedPosition);
                     removeMessages(RESUME);
                     sendEmptyMessage(UPDATE);
@@ -216,19 +250,6 @@ public class DrawHandler extends Handler {
                 } else {
                     sendEmptyMessageDelayed(RESUME, 100);
                 }
-                break;
-            case SEEK_POS:
-                quitFlag = true;
-                quitUpdateThread();
-                Long position = (Long) msg.obj;
-                long deltaMs = position - timer.currMillisecond;
-                mTimeBase -= deltaMs;
-                timer.update(System.currentTimeMillis() - mTimeBase);
-                if (drawTask != null)
-                    drawTask.seek(timer.currMillisecond);
-                pausedPosition = timer.currMillisecond;
-                removeMessages(RESUME);
-                sendEmptyMessage(RESUME);
                 break;
             case UPDATE:
                 if (mUpdateInNewThread) {
@@ -243,25 +264,6 @@ public class DrawHandler extends Handler {
                 if (updateFlag != null && updateFlag) {
                     mContext.mGlobalFlagValues.updateMeasureFlag();
                 }
-                break;
-            case SHOW_DANMAKUS:
-                Long start = (Long) msg.obj;
-                if(drawTask != null) {
-                    if (start == null) {
-                        timer.update(getCurrentTime());
-                        drawTask.requestClear();
-                    } else {
-                        drawTask.start();
-                        drawTask.seek(start);
-                        drawTask.requestClear();
-                        obtainMessage(START, start).sendToTarget();
-                    }
-                }
-                mDanmakusVisible = true;
-                if(quitFlag && mDanmakuView != null) {
-                    mDanmakuView.drawDanmakus();
-                }
-                notifyRendering();
                 break;
             case HIDE_DANMAKUS:
                 mDanmakusVisible = false;
@@ -287,12 +289,11 @@ public class DrawHandler extends Handler {
                 }
                 quitFlag = true;
                 syncTimerIfNeeded();
-                mSkipFrames = 0;
+                pausedPosition = timer.currMillisecond;
                 if (mThread != null) {
                     notifyRendering();
                     quitUpdateThread();
                 }
-                pausedPosition = timer.currMillisecond;
                 if (what == QUIT){
                     if (this.drawTask != null){
                         this.drawTask.quit();
@@ -324,16 +325,17 @@ public class DrawHandler extends Handler {
 
     private void quitUpdateThread() {
         if (mThread != null) {
+            final UpdateThread thread = mThread;
+            mThread = null;
             synchronized (drawTask) {
                 drawTask.notifyAll();
             }
-            mThread.quit();
+            thread.quit();
             try {
-                mThread.join();
+                thread.join();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            mThread = null;
         }
     }
 
@@ -341,7 +343,7 @@ public class DrawHandler extends Handler {
         if (quitFlag) {
             return;
         }
-        long startMS = System.currentTimeMillis();
+        long startMS = SystemClock.uptimeMillis();
         long d = syncTimer(startMS);
         if (d < 0) {
             removeMessages(UPDATE);
@@ -350,6 +352,10 @@ public class DrawHandler extends Handler {
         }
         d = mDanmakuView.drawDanmakus();
         removeMessages(UPDATE);
+        if (d > mCordonTime2) {  // this situation may be cuased by ui-thread waiting of DanmakuView, so we sync-timer at once
+            timer.add(d);
+            mDrawTimes.clear();
+        }
         if (!mDanmakusVisible) {
             waitRendering(INDEFINITE_TIME);
             return;
@@ -375,11 +381,11 @@ public class DrawHandler extends Handler {
         mThread = new UpdateThread("DFM Update") {
             @Override
             public void run() {
-                long lastTime = System.currentTimeMillis();
+                long lastTime = SystemClock.uptimeMillis();
                 long dTime = 0;
                 while (!isQuited() && !quitFlag) {
-                    long startMS = System.currentTimeMillis();
-                    dTime = System.currentTimeMillis() - lastTime;
+                    long startMS = SystemClock.uptimeMillis();
+                    dTime = SystemClock.uptimeMillis() - lastTime;
                     long diffTime = mFrameUpdateRate - dTime;
                     if (diffTime > 1) {
                         SystemClock.sleep(1);
@@ -392,6 +398,10 @@ public class DrawHandler extends Handler {
                         continue;
                     }
                     d = mDanmakuView.drawDanmakus();
+                    if (d > mCordonTime2) {  // this situation may be cuased by ui-thread waiting of DanmakuView, so we sync-timer at once
+                        timer.add(d);
+                        mDrawTimes.clear();
+                    }
                     if (!mDanmakusVisible) {
                         waitRendering(INDEFINITE_TIME);
                     } else if (mRenderingState.nothingRendered && mIdleSleep) {
@@ -447,14 +457,14 @@ public class DrawHandler extends Handler {
 
     private void syncTimerIfNeeded() {
         if (mInWaitingState) {
-            syncTimer(System.currentTimeMillis());
+            syncTimer(SystemClock.uptimeMillis());
         }
     }
 
     private void initRenderingConfigs() {
         long averageFrameConsumingTime = 16;
         mCordonTime = Math.max(33, (long) (averageFrameConsumingTime * 2.5f));
-        mCordonTime2 = mCordonTime * 2;
+        mCordonTime2 = (long) (mCordonTime * 2.5f);
         mFrameUpdateRate = Math.max(16, averageFrameConsumingTime / 15 * 15);
         mThresholdTime = mFrameUpdateRate + 3;
 //        Log.i("DrawHandler", "initRenderingConfigs test-fps:" + averageFrameConsumingTime + "ms,mCordonTime:"
@@ -474,7 +484,22 @@ public class DrawHandler extends Handler {
 
                         @Override
                         public void onDanmakuAdd(BaseDanmaku danmaku) {
-                            obtainMessage(NOTIFY_RENDERING).sendToTarget();
+                            if (danmaku.isTimeOut()) {
+                                return;
+                            }
+                            long delay = danmaku.time - timer.currMillisecond;
+                            if (delay > 0) {
+                                sendEmptyMessageDelayed(NOTIFY_RENDERING, delay);
+                            } else if (mInWaitingState) {
+                                notifyRendering();
+                            }
+                        }
+
+                        @Override
+                        public void onDanmakuShown(BaseDanmaku danmaku) {
+                            if (mCallback != null) {
+                                mCallback.danmakuShown(danmaku);
+                            }
                         }
 
                         @Override
@@ -486,9 +511,7 @@ public class DrawHandler extends Handler {
 
                         @Override
                         public void onDanmakuConfigChanged() {
-                            if (quitFlag && mDanmakusVisible) {
-                                obtainMessage(UPDATE_WHEN_PAUSED).sendToTarget();
-                            }
+                            redrawIfNeeded();
                         }
                     });
         } else {
@@ -539,6 +562,13 @@ public class DrawHandler extends Handler {
         }
     }
 
+    public void invalidateDanmaku(BaseDanmaku item, boolean remeasure) {
+        if (drawTask != null && item != null) {
+            drawTask.invalidateDanmaku(item, remeasure);
+        }
+        redrawIfNeeded();
+    }
+
     public void resume() {
         sendEmptyMessage(DrawHandler.RESUME);
     }
@@ -555,6 +585,7 @@ public class DrawHandler extends Handler {
     public void showDanmakus(Long position) {
         if (mDanmakusVisible)
             return;
+        mDanmakusVisible = true;
         removeMessages(SHOW_DANMAKUS);
         removeMessages(HIDE_DANMAKUS);
         obtainMessage(SHOW_DANMAKUS, position).sendToTarget();
@@ -563,6 +594,7 @@ public class DrawHandler extends Handler {
     public long hideDanmakus(boolean quitDrawTask) {
         if (!mDanmakusVisible)
             return timer.currMillisecond;
+        mDanmakusVisible = false;
         removeMessages(SHOW_DANMAKUS);
         removeMessages(HIDE_DANMAKUS);
         obtainMessage(HIDE_DANMAKUS, quitDrawTask).sendToTarget();
@@ -582,6 +614,12 @@ public class DrawHandler extends Handler {
         return mRenderingState;
     }
 
+    private void redrawIfNeeded() {
+        if (quitFlag && mDanmakusVisible) {
+            obtainMessage(UPDATE_WHEN_PAUSED).sendToTarget();
+        }
+    }
+
     private void notifyRendering() {
         if (!mInWaitingState) {
             return;
@@ -589,7 +627,6 @@ public class DrawHandler extends Handler {
         if(drawTask != null) {
             drawTask.requestClear();
         }
-        mSkipFrames = 0;
         if (mUpdateInNewThread) {
             synchronized (this) {
                 mDrawTimes.clear();
@@ -606,9 +643,12 @@ public class DrawHandler extends Handler {
     }
 
     private void waitRendering(long dTime) {
-        mRenderingState.sysTime = System.currentTimeMillis();
+        mRenderingState.sysTime = SystemClock.uptimeMillis();
         mInWaitingState = true;
         if (mUpdateInNewThread) {
+            if (mThread == null) {
+                return;
+            }
             try {
                 synchronized (drawTask) {
                     if (dTime == INDEFINITE_TIME) {
@@ -642,7 +682,7 @@ public class DrawHandler extends Handler {
     }
 
     private synchronized void recordRenderingTime() {
-        long lastTime = System.currentTimeMillis();
+        long lastTime = SystemClock.uptimeMillis();
         mDrawTimes.addLast(lastTime);
         int frames = mDrawTimes.size();
         if (frames > MAX_RECORD_SIZE) {
@@ -665,9 +705,9 @@ public class DrawHandler extends Handler {
         }
     }
 
-    public void removeAllDanmakus() {
+    public void removeAllDanmakus(boolean isClearDanmakusOnScreen) {
         if (drawTask != null) {
-            drawTask.removeAllDanmakus();
+            drawTask.removeAllDanmakus(isClearDanmakusOnScreen);
         }
     }
 
@@ -686,13 +726,16 @@ public class DrawHandler extends Handler {
     }
 
     public long getCurrentTime() {
+        if (!mReady) {
+            return 0;
+        }
         if (mInSeekingAction) {
             return mDesireSeekingTime;
         }
         if (quitFlag || !mInWaitingState) {
             return timer.currMillisecond - mRemainingTime;
         }
-        return System.currentTimeMillis() - mTimeBase;
+        return SystemClock.uptimeMillis() - mTimeBase;
     }
 
     public void clearDanmakusOnScreen() {

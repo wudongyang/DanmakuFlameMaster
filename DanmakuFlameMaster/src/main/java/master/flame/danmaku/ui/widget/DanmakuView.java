@@ -40,6 +40,7 @@ import master.flame.danmaku.danmaku.model.IDanmakus;
 import master.flame.danmaku.danmaku.model.android.DanmakuContext;
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
 import master.flame.danmaku.danmaku.renderer.IRenderer.RenderingState;
+import master.flame.danmaku.danmaku.util.SystemClock;
 
 public class DanmakuView extends View implements IDanmakuView, IDanmakuViewController {
 
@@ -101,11 +102,18 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
             handler.addDanmaku(item);
         }
     }
-    
+
     @Override
-    public void removeAllDanmakus() {
+    public void invalidateDanmaku(BaseDanmaku item, boolean remeasure) {
         if (handler != null) {
-            handler.removeAllDanmakus();
+            handler.invalidateDanmaku(item, remeasure);
+        }
+    }
+
+    @Override
+    public void removeAllDanmakus(boolean isClearDanmakusOnScreen) {
+        if (handler != null) {
+            handler.removeAllDanmakus(isClearDanmakusOnScreen);
         }
     }
     
@@ -144,18 +152,21 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
     }
 
     private void stopDraw() {
+        DrawHandler handler = this.handler;
+        this.handler = null;
+        unlockCanvasAndPost();
         if (handler != null) {
             handler.quit();
-            handler = null;
         }
         if (mHandlerThread != null) {
+            HandlerThread handlerThread = this.mHandlerThread;
+            mHandlerThread = null;
             try {
-                mHandlerThread.join();
+                handlerThread.join();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            mHandlerThread.quit();
-            mHandlerThread = null;
+            handlerThread.quit();
         }
     }
     
@@ -223,7 +234,7 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
 
     private boolean mClearFlag;
     private float fps() {
-        long lastTime = System.currentTimeMillis();
+        long lastTime = SystemClock.uptimeMillis();
         mDrawTimes.addLast(lastTime);
         float dtime = lastTime - mDrawTimes.getFirst();
         int frames = mDrawTimes.size();
@@ -238,9 +249,9 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
             return 0;
         if (!isShown())
             return -1;
-        long stime = System.currentTimeMillis();
+        long stime = SystemClock.uptimeMillis();
         lockCanvas();
-        return System.currentTimeMillis() - stime;
+        return SystemClock.uptimeMillis() - stime;
     }
     
     @SuppressLint("NewApi")
